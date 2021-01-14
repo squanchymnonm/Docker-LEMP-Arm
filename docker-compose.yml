@@ -46,7 +46,7 @@ services:
       - app-network
 
   #PHP Service
-  php:
+  php-fpm:
     build:
       context: ./php-fpm
       dockerfile: Dockerfile
