@@ -27,7 +27,7 @@ services:
 
   #MySQL Service
   mysql:
-    image: rm64v8/mariadb
+    image: arm64v8/mariadb
     container_name: mysql
     restart: unless-stopped
     tty: true
