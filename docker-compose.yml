@@ -12,7 +12,6 @@ services:
   nginx:
     image: nginx:alpine
     container_name: nginx
-    context: ./nginx
     restart: unless-stopped
     tty: true
     ports:
