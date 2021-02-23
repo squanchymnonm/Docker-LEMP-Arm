@@ -14,7 +14,7 @@
 
 ARG LARADOCK_PHP_VERSION
 ARG BASE_IMAGE_TAG_PREFIX=latest
-FROM laradock/php-fpm:${BASE_IMAGE_TAG_PREFIX}-${LARADOCK_PHP_VERSION}
+FROM laraberries/php-fpm:${BASE_IMAGE_TAG_PREFIX}-${LARADOCK_PHP_VERSION}
 
 LABEL maintainer="Mahmoud Zalt <mahmoud@zalt.me>"
 
@@ -51,7 +51,7 @@ RUN set -xe; \
       #
       # next lines are here becase there is no auto build on dockerhub see https://github.com/laradock/laradock/pull/1903#issuecomment-463142846
       libzip-dev zip unzip && \
-      if [ ${LARADOCK_PHP_VERSION} = "7.3" ] || [ ${LARADOCK_PHP_VERSION} = "7.4" ] || [ $(php -r "echo PHP_MAJOR_VERSION;") = "8" ]; then \
+      if [ ${LARADOCK_PHP_VERSION} = "7.3" ] || [ ${LARADOCK_PHP_VERSION} = "7.4" ]; then \
         docker-php-ext-configure zip; \
       else \
         docker-php-ext-configure zip --with-libzip; \
@@ -187,17 +187,13 @@ ARG INSTALL_XDEBUG=false
 
 RUN if [ ${INSTALL_XDEBUG} = true ]; then \
   # Install the xdebug extension
-  if [ $(php -r "echo PHP_MAJOR_VERSION;") = "8" ]; then \
-    pecl install xdebug-3.0.0; \
+  if [ $(php -r "echo PHP_MAJOR_VERSION;") = "5" ]; then \
+    pecl install xdebug-2.5.5; \
   else \
-    if [ $(php -r "echo PHP_MAJOR_VERSION;") = "5" ]; then \
-      pecl install xdebug-2.5.5; \
+    if [ $(php -r "echo PHP_MINOR_VERSION;") = "0" ]; then \
+      pecl install xdebug-2.9.0; \
     else \
-      if [ $(php -r "echo PHP_MINOR_VERSION;") = "0" ]; then \
-        pecl install xdebug-2.9.0; \
-      else \
-        pecl install xdebug-2.9.8; \
-      fi \
+      pecl install xdebug; \
     fi \
   fi && \
   docker-php-ext-enable xdebug \
@@ -206,20 +202,9 @@ RUN if [ ${INSTALL_XDEBUG} = true ]; then \
 # Copy xdebug configuration for remote debugging
 COPY ./xdebug.ini /usr/local/etc/php/conf.d/xdebug.ini
 
-RUN if [ $(php -r "echo PHP_MAJOR_VERSION;") = "8" ]; then \
-  sed -i "s/xdebug.remote_host=/xdebug.client_host=/" /usr/local/etc/php/conf.d/xdebug.ini && \
-  sed -i "s/xdebug.remote_connect_back=0/xdebug.discover_client_host=false/" /usr/local/etc/php/conf.d/xdebug.ini && \
-  sed -i "s/xdebug.remote_port=9000/xdebug.client_port=9003/" /usr/local/etc/php/conf.d/xdebug.ini && \
-  sed -i "s/xdebug.profiler_enable=0/; xdebug.profiler_enable=0/" /usr/local/etc/php/conf.d/xdebug.ini && \
-  sed -i "s/xdebug.profiler_output_dir=/xdebug.output_dir=/" /usr/local/etc/php/conf.d/xdebug.ini && \
-  sed -i "s/xdebug.remote_mode=req/; xdebug.remote_mode=req/" /usr/local/etc/php/conf.d/xdebug.ini && \
-  sed -i "s/xdebug.remote_autostart=0/xdebug.start_with_request=yes/" /usr/local/etc/php/conf.d/xdebug.ini && \
-  sed -i "s/xdebug.remote_enable=0/xdebug.mode=debug/" /usr/local/etc/php/conf.d/xdebug.ini \
-;else \
-  sed -i "s/xdebug.remote_autostart=0/xdebug.remote_autostart=1/" /usr/local/etc/php/conf.d/xdebug.ini && \
-  sed -i "s/xdebug.remote_enable=0/xdebug.remote_enable=1/" /usr/local/etc/php/conf.d/xdebug.ini \
-;fi
-RUN sed -i "s/xdebug.cli_color=0/xdebug.cli_color=1/" /usr/local/etc/php/conf.d/xdebug.ini
+RUN sed -i "s/xdebug.remote_autostart=0/xdebug.remote_autostart=1/" /usr/local/etc/php/conf.d/xdebug.ini && \
+    sed -i "s/xdebug.remote_enable=0/xdebug.remote_enable=1/" /usr/local/etc/php/conf.d/xdebug.ini && \
+    sed -i "s/xdebug.cli_color=0/xdebug.cli_color=1/" /usr/local/etc/php/conf.d/xdebug.ini
 
 ###########################################################################
 # pcov:
@@ -327,10 +312,9 @@ RUN if [ ${INSTALL_MONGO} = true ]; then \
     if [ $(php -r "echo PHP_MAJOR_VERSION;") = "5" ]; then \
       pecl install mongo && \
       docker-php-ext-enable mongo \
-    ;else \
-      pecl install mongodb && \
-      docker-php-ext-enable mongodb \
-    ;fi \
+    ;fi && \
+    pecl install mongodb && \
+    docker-php-ext-enable mongodb \
 ;fi
 
 ###########################################################################
@@ -343,7 +327,7 @@ RUN if [ ${INSTALL_XHPROF} = true ]; then \
     # Install the php xhprof extension
     if [ $(php -r "echo PHP_MAJOR_VERSION;") = 7 ]; then \
       curl -L -o /tmp/xhprof.tar.gz "https://github.com/tideways/php-xhprof-extension/archive/v5.0.1.tar.gz"; \
-    else \ 
+    else \
       curl -L -o /tmp/xhprof.tar.gz "https://codeload.github.com/phacility/xhprof/tar.gz/master"; \
     fi \
     && mkdir -p xhprof \
@@ -505,7 +489,6 @@ RUN set -xe; \
 ###########################################################################
 
 ARG INSTALL_OCI8=false
-ARG ORACLE_INSTANT_CLIENT_MIRROR=https://github.com/diogomascarenha/oracle-instantclient/raw/master/
 
 ENV LD_LIBRARY_PATH="/opt/oracle/instantclient_12_1"
 ENV OCI_HOME="/opt/oracle/instantclient_12_1"
@@ -519,8 +502,8 @@ RUN if [ ${INSTALL_OCI8} = true ]; then \
     # Install Oracle Instantclient
     && mkdir /opt/oracle \
         && cd /opt/oracle \
-        && wget ${ORACLE_INSTANT_CLIENT_MIRROR}instantclient-basic-linux.x64-12.1.0.2.0.zip \
-        && wget ${ORACLE_INSTANT_CLIENT_MIRROR}instantclient-sdk-linux.x64-12.1.0.2.0.zip \
+        && wget https://github.com/diogomascarenha/oracle-instantclient/raw/master/instantclient-basic-linux.x64-12.1.0.2.0.zip \
+        && wget https://github.com/diogomascarenha/oracle-instantclient/raw/master/instantclient-sdk-linux.x64-12.1.0.2.0.zip \
         && unzip /opt/oracle/instantclient-basic-linux.x64-12.1.0.2.0.zip -d /opt/oracle \
         && unzip /opt/oracle/instantclient-sdk-linux.x64-12.1.0.2.0.zip -d /opt/oracle \
         && ln -s /opt/oracle/instantclient_12_1/libclntsh.so.12.1 /opt/oracle/instantclient_12_1/libclntsh.so \
@@ -536,7 +519,7 @@ RUN if [ ${INSTALL_OCI8} = true ]; then \
     if [ $(php -r "echo PHP_MAJOR_VERSION;") = "5" ]; then \
       echo 'instantclient,/opt/oracle/instantclient_12_1/' | pecl install oci8-2.0.10; \
     else \
-      echo 'instantclient,/opt/oracle/instantclient_12_1/' | pecl install oci8-2.2.0; \
+      echo 'instantclient,/opt/oracle/instantclient_12_1/' | pecl install oci8; \
     fi \
         && docker-php-ext-configure pdo_oci --with-pdo-oci=instantclient,/opt/oracle/instantclient_12_1,12.1 \
         && docker-php-ext-configure pdo_dblib --with-libdir=/lib/x86_64-linux-gnu \
@@ -863,21 +846,6 @@ RUN if [ ${INSTALL_SSHPASS} = true ]; then \
 ;fi
 
 ###########################################################################
-# Docker Client:
-###########################################################################
-
-USER root
-
-ARG INSTALL_DOCKER_CLIENT=false
-
-RUN if [ ${INSTALL_DOCKER_CLIENT} = true ]; then \
-    curl -sS https://download.docker.com/linux/static/stable/x86_64/docker-20.10.3.tgz -o /tmp/docker.tar.gz && \
-    tar -xzf /tmp/docker.tar.gz -C /tmp/ && \
-    cp /tmp/docker/docker* /usr/local/bin && \
-    chmod +x /usr/local/bin/docker* \
-;fi
-
-###########################################################################
 # FFMPEG:
 ###########################################################################
 
@@ -888,30 +856,6 @@ ARG INSTALL_FFMPEG=false
 RUN if [ ${INSTALL_FFMPEG} = true ]; then \
     apt-get -y install ffmpeg \
 ;fi
-
-###########################################################################
-# BBC Audio Waveform Image Generator:
-###########################################################################
-
-USER root
-
-ARG INSTALL_AUDIOWAVEFORM=false
-
-RUN if [ ${INSTALL_AUDIOWAVEFORM} = true ]; then \
-   apt-get -y install git wget make cmake gcc g++ libmad0-dev libid3tag0-dev libsndfile1-dev libgd-dev libboost-filesystem-dev libboost-program-options-dev libboost-regex-dev \
-   && git clone https://github.com/bbc/audiowaveform.git \
-   && cd audiowaveform \
-   && wget https://github.com/google/googletest/archive/release-1.10.0.tar.gz \
-   && tar xzf release-1.10.0.tar.gz \
-   && ln -s googletest-release-1.10.0/googletest googletest \
-   && ln -s googletest-release-1.10.0/googlemock googlemock \
-   && mkdir build \
-   && cd build \
-   && cmake .. \
-   && make \
-   && make install \
-;fi
-
 
 #####################################
 # wkhtmltopdf:
@@ -928,7 +872,7 @@ RUN if [ ${INSTALL_WKHTMLTOPDF} = true ]; then \
     libx11-dev \
     libjpeg62 \
     libxtst6 \
-    fontconfig \ 
+    fontconfig \
     libjpeg62-turbo \
     xfonts-base \
     xfonts-75dpi \
@@ -975,38 +919,6 @@ ARG INSTALL_XMLRPC=false
 
 RUN if [ ${INSTALL_XMLRPC} = true ]; then \
     docker-php-ext-install xmlrpc \
-;fi
-
-###########################################################################
-# New Relic for PHP:
-###########################################################################
-ARG NEW_RELIC=${NEW_RELIC}
-ARG NEW_RELIC_KEY=${NEW_RELIC_KEY}
-ARG NEW_RELIC_APP_NAME=${NEW_RELIC_APP_NAME}
-
-RUN if [ ${NEW_RELIC} = true ]; then \
-  curl -L http://download.newrelic.com/php_agent/archive/9.9.0.260/newrelic-php5-9.9.0.260-linux.tar.gz | tar -C /tmp -zx && \
-  export NR_INSTALL_USE_CP_NOT_LN=1 && \
-  export NR_INSTALL_SILENT=1 && \
-  /tmp/newrelic-php5-*/newrelic-install install && \
-  rm -rf /tmp/newrelic-php5-* /tmp/nrinstall* && \
-  sed -i \
-  -e 's/"REPLACE_WITH_REAL_KEY"/"${NEW_RELIC_KEY}"/' \
-  -e 's/newrelic.appname = "PHP Application"/newrelic.appname = "${NEW_RELIC_APP_NAME}"/' \
-  -e 's/;newrelic.daemon.app_connect_timeout =.*/newrelic.daemon.app_connect_timeout=15s/' \
-  -e 's/;newrelic.daemon.start_timeout =.*/newrelic.daemon.start_timeout=5s/' \
-  /usr/local/etc/php/conf.d/newrelic.ini \
-;fi
-###########################################################################
-# Downgrade Openssl:
-###########################################################################
-
-ARG DOWNGRADE_OPENSSL_TLS_AND_SECLEVEL=false
-
-RUN if [ ${DOWNGRADE_OPENSSL_TLS_AND_SECLEVEL} = true ]; then \
-    sed -i 's,^\(MinProtocol[ ]*=\).*,\1'TLSv1.2',g' /etc/ssl/openssl.cnf \
-    && \
-    sed -i 's,^\(CipherString[ ]*=\).*,\1'DEFAULT@SECLEVEL=1',g' /etc/ssl/openssl.cnf\
 ;fi
 
 ###########################################################################

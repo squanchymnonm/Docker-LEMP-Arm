@@ -12,26 +12,15 @@
 # Note: Base Image name format {image-tag}-{php-version}
 #
 
+#FROM phusion/baseimage:latest-arm
 ARG LARADOCK_PHP_VERSION
 ARG BASE_IMAGE_TAG_PREFIX=latest
-FROM laradock/workspace:${BASE_IMAGE_TAG_PREFIX}-${LARADOCK_PHP_VERSION}
+FROM laraberries/workspace:${BASE_IMAGE_TAG_PREFIX}-${LARADOCK_PHP_VERSION}
 
 LABEL maintainer="Mahmoud Zalt <mahmoud@zalt.me>"
 
-ARG LARADOCK_PHP_VERSION
-
 # Set Environment Variables
 ENV DEBIAN_FRONTEND noninteractive
-
-# If you're in China, or you need to change sources, will be set CHANGE_SOURCE to true in .env.
-
-ARG CHANGE_SOURCE=false
-RUN if [ ${CHANGE_SOURCE} = true ]; then \
-    # Change application source from deb.debian.org to aliyun source
-    sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/' /etc/apt/sources.list && \
-    sed -i 's/security.debian.org/mirrors.tuna.tsinghua.edu.cn/' /etc/apt/sources.list && \
-    sed -i 's/security-cdn.debian.org/mirrors.tuna.tsinghua.edu.cn/' /etc/apt/sources.list \
-;fi
 
 # Start as root
 USER root
@@ -61,7 +50,7 @@ RUN set -xe; \
     apt-get update -yqq && \
     pecl channel-update pecl.php.net && \
     groupadd -g ${PGID} laradock && \
-    useradd -l -u ${PUID} -g laradock -m laradock -G docker_env && \
+    useradd -u ${PUID} -g laradock -m laradock -G docker_env && \
     usermod -p "*" laradock -s /bin/bash && \
     apt-get install -yqq \
       apt-utils \
@@ -147,11 +136,6 @@ RUN chown -R laradock:laradock /home/laradock/.composer
 RUN echo "" >> ~/.bashrc && \
     echo 'export PATH="$HOME/.composer/vendor/bin:$PATH"' >> ~/.bashrc
 
-# Update composer
-ARG COMPOSER_VERSION=2
-ENV COMPOSER_VERSION ${COMPOSER_VERSION}
-RUN composer self-update --${COMPOSER_VERSION}
-
 USER laradock
 
 # Check if global install need to be ran
@@ -202,14 +186,6 @@ USER root
 COPY ./crontab /etc/cron.d
 
 RUN chmod -R 644 /etc/cron.d
-
-###########################################################################
-# Update Repositories
-###########################################################################
-
-USER root
-
-RUN apt-get update -yqq
 
 ###########################################################################
 # Drush:
@@ -363,49 +339,17 @@ USER root
 ARG INSTALL_XDEBUG=false
 
 RUN if [ ${INSTALL_XDEBUG} = true ]; then \
-  # Install the xdebug extension
-  if [ $(php -r "echo PHP_MAJOR_VERSION;") = "8" ]; then \
-    pecl install xdebug-3.0.0; \
-  else \
-    if [ $(php -r "echo PHP_MAJOR_VERSION;") = "5" ]; then \
-      pecl install xdebug-2.5.5; \
-    else \
-      if [ $(php -r "echo PHP_MAJOR_VERSION;") = "7" ] && [ $(php -r "echo PHP_MINOR_VERSION;") = "0" ]; then \
-        pecl install xdebug-2.9.0; \
-      else \
-        if [ $(php -r "echo PHP_MAJOR_VERSION;") = "7" ] && [ $(php -r "echo PHP_MINOR_VERSION;") = "1" ]; then \
-          pecl install xdebug-2.9.8; \
-        else \
-          if [ $(php -r "echo PHP_MAJOR_VERSION;") = "7" ]; then \
-            pecl install xdebug-2.9.8; \
-          else \
-            #pecl install xdebug; \
-            echo "xDebug 3 required, not supported."; \
-          fi \
-        fi \
-      fi \
-    fi \
-  fi && \
-  echo "zend_extension=xdebug.so" >> /etc/php/${LARADOCK_PHP_VERSION}/cli/conf.d/20-xdebug.ini \
+    # Load the xdebug extension only with phpunit commands
+    apt-get install -y php${LARADOCK_PHP_VERSION}-xdebug && \
+    sed -i 's/^;//g' /etc/php/${LARADOCK_PHP_VERSION}/cli/conf.d/20-xdebug.ini \
 ;fi
 
 # ADD for REMOTE debugging
 COPY ./xdebug.ini /etc/php/${LARADOCK_PHP_VERSION}/cli/conf.d/xdebug.ini
 
-RUN if [ $(php -r "echo PHP_MAJOR_VERSION;") = "8" ]; then \
-  sed -i "s/xdebug.remote_host=/xdebug.client_host=/" /etc/php/${LARADOCK_PHP_VERSION}/cli/conf.d/xdebug.ini && \
-  sed -i "s/xdebug.remote_connect_back=0/xdebug.discover_client_host=false/" /etc/php/${LARADOCK_PHP_VERSION}/cli/conf.d/xdebug.ini && \
-  sed -i "s/xdebug.remote_port=9000/xdebug.client_port=9003/" /etc/php/${LARADOCK_PHP_VERSION}/cli/conf.d/xdebug.ini && \
-  sed -i "s/xdebug.profiler_enable=0/; xdebug.profiler_enable=0/" /etc/php/${LARADOCK_PHP_VERSION}/cli/conf.d/xdebug.ini && \
-  sed -i "s/xdebug.profiler_output_dir=/xdebug.output_dir=/" /etc/php/${LARADOCK_PHP_VERSION}/cli/conf.d/xdebug.ini && \
-  sed -i "s/xdebug.remote_mode=req/; xdebug.remote_mode=req/" /etc/php/${LARADOCK_PHP_VERSION}/cli/conf.d/xdebug.ini && \
-  sed -i "s/xdebug.remote_autostart=0/xdebug.start_with_request=yes/" /etc/php/${LARADOCK_PHP_VERSION}/cli/conf.d/xdebug.ini && \
-  sed -i "s/xdebug.remote_enable=0/xdebug.mode=debug/" /etc/php/${LARADOCK_PHP_VERSION}/cli/conf.d/xdebug.ini \
-;else \
-  sed -i "s/xdebug.remote_autostart=0/xdebug.remote_autostart=1/" /etc/php/${LARADOCK_PHP_VERSION}/cli/conf.d/xdebug.ini && \
-  sed -i "s/xdebug.remote_enable=0/xdebug.remote_enable=1/" /etc/php/${LARADOCK_PHP_VERSION}/cli/conf.d/xdebug.ini \
-;fi
-RUN sed -i "s/xdebug.cli_color=0/xdebug.cli_color=1/" /etc/php/${LARADOCK_PHP_VERSION}/cli/conf.d/xdebug.ini
+RUN sed -i "s/xdebug.remote_autostart=0/xdebug.remote_autostart=1/" /etc/php/${LARADOCK_PHP_VERSION}/cli/conf.d/xdebug.ini && \
+    sed -i "s/xdebug.remote_enable=0/xdebug.remote_enable=1/" /etc/php/${LARADOCK_PHP_VERSION}/cli/conf.d/xdebug.ini && \
+    sed -i "s/xdebug.cli_color=0/xdebug.cli_color=1/" /etc/php/${LARADOCK_PHP_VERSION}/cli/conf.d/xdebug.ini
 
 ###########################################################################
 # pcov:
@@ -489,11 +433,10 @@ RUN if [ ${INSTALL_MONGO} = true ]; then \
       pecl install mongo && \
       echo "extension=mongo.so" >> /etc/php/${LARADOCK_PHP_VERSION}/mods-available/mongo.ini && \
       ln -s /etc/php/${LARADOCK_PHP_VERSION}/mods-available/mongo.ini /etc/php/${LARADOCK_PHP_VERSION}/cli/conf.d/30-mongo.ini \
-    ;else \
-      pecl install mongodb && \
-      echo "extension=mongodb.so" >> /etc/php/${LARADOCK_PHP_VERSION}/mods-available/mongodb.ini && \
-      ln -s /etc/php/${LARADOCK_PHP_VERSION}/mods-available/mongodb.ini /etc/php/${LARADOCK_PHP_VERSION}/cli/conf.d/30-mongodb.ini \
-    ;fi \
+    ;fi && \
+    pecl install mongodb && \
+    echo "extension=mongodb.so" >> /etc/php/${LARADOCK_PHP_VERSION}/mods-available/mongodb.ini && \
+    ln -s /etc/php/${LARADOCK_PHP_VERSION}/mods-available/mongodb.ini /etc/php/${LARADOCK_PHP_VERSION}/cli/conf.d/30-mongodb.ini \
 ;fi
 
 ###########################################################################
@@ -619,15 +562,9 @@ RUN if [ ${INSTALL_LIBPNG} = true ]; then \
 ARG INSTALL_INOTIFY=false
 
 RUN if [ ${INSTALL_INOTIFY} = true ]; then \
-    if [ $(php -r "echo PHP_MAJOR_VERSION;") != "5" ]; then \
-      pecl -q install inotify-0.1.6 && \
-      echo "extension=inotify.so" >> /etc/php/${LARADOCK_PHP_VERSION}/mods-available/inotify.ini && \
-      ln -s /etc/php/${LARADOCK_PHP_VERSION}/mods-available/inotify.ini /etc/php/${LARADOCK_PHP_VERSION}/cli/conf.d/20-inotify.ini \
-    else \
-      pecl -q install inotify && \
-      echo "extension=inotify.so" >> /etc/php/${LARADOCK_PHP_VERSION}/mods-available/inotify.ini && \
-      ln -s /etc/php/${LARADOCK_PHP_VERSION}/mods-available/inotify.ini /etc/php/${LARADOCK_PHP_VERSION}/cli/conf.d/20-inotify.ini \
-    ;fi \
+    pecl -q install inotify && \
+    echo "extension=inotify.so" >> /etc/php/${LARADOCK_PHP_VERSION}/mods-available/inotify.ini && \
+    ln -s /etc/php/${LARADOCK_PHP_VERSION}/mods-available/inotify.ini /etc/php/${LARADOCK_PHP_VERSION}/cli/conf.d/20-inotify.ini \
 ;fi
 
 ###########################################################################
@@ -718,14 +655,6 @@ ARG INSTALL_NPM_VUE_CLI=false
 ARG INSTALL_NPM_ANGULAR_CLI=false
 ARG NPM_REGISTRY
 ENV NPM_REGISTRY ${NPM_REGISTRY}
-ARG NPM_FETCH_RETRIES
-ENV NPM_FETCH_RETRIES ${NPM_FETCH_RETRIES}
-ARG NPM_FETCH_RETRY_FACTOR
-ENV NPM_FETCH_RETRY_FACTOR ${NPM_FETCH_RETRY_FACTOR}
-ARG NPM_FETCH_RETRY_MINTIMEOUT
-ENV NPM_FETCH_RETRY_MINTIMEOUT ${NPM_FETCH_RETRY_MINTIMEOUT}
-ARG NPM_FETCH_RETRY_MAXTIMEOUT
-ENV NPM_FETCH_RETRY_MAXTIMEOUT ${NPM_FETCH_RETRY_MAXTIMEOUT}
 ENV NVM_DIR /home/laradock/.nvm
 ARG NVM_NODEJS_ORG_MIRROR
 ENV NVM_NODEJS_ORG_MIRROR ${NVM_NODEJS_ORG_MIRROR}
@@ -738,10 +667,6 @@ RUN if [ ${INSTALL_NODE} = true ]; then \
         && nvm install ${NODE_VERSION} \
         && nvm use ${NODE_VERSION} \
         && nvm alias ${NODE_VERSION} \
-        && npm config set fetch-retries ${NPM_FETCH_RETRIES} \
-        && npm config set fetch-retry-factor ${NPM_FETCH_RETRY_FACTOR} \
-        && npm config set fetch-retry-mintimeout ${NPM_FETCH_RETRY_MINTIMEOUT} \
-        && npm config set fetch-retry-maxtimeout ${NPM_FETCH_RETRY_MAXTIMEOUT} \
         && if [ ${NPM_REGISTRY} ]; then \
         npm config set registry ${NPM_REGISTRY} \
         ;fi \
@@ -797,10 +722,6 @@ RUN if [ ${INSTALL_NODE} = true ]; then \
 RUN if [ ${NPM_REGISTRY} ]; then \
     . ~/.bashrc && npm config set registry ${NPM_REGISTRY} \
 ;fi
-
-# Mount .npmrc into home folder
-COPY ./.npmrc /root/.npmrc
-COPY ./.npmrc /home/laradock/.npmrc
 
 
 ###########################################################################
@@ -897,7 +818,6 @@ RUN set -xe; \
 
 USER root
 ARG INSTALL_OCI8=false
-ARG ORACLE_INSTANT_CLIENT_MIRROR=https://github.com/diogomascarenha/oracle-instantclient/raw/master/
 
 ENV LD_LIBRARY_PATH="/opt/oracle/instantclient_12_1"
 ENV OCI_HOME="/opt/oracle/instantclient_12_1"
@@ -911,8 +831,8 @@ RUN if [ ${INSTALL_OCI8} = true ]; then \
   # Install Oracle Instantclient
   && mkdir /opt/oracle \
       && cd /opt/oracle \
-      && wget ${ORACLE_INSTANT_CLIENT_MIRROR}instantclient-basic-linux.x64-12.1.0.2.0.zip \
-      && wget ${ORACLE_INSTANT_CLIENT_MIRROR}instantclient-sdk-linux.x64-12.1.0.2.0.zip \
+      && wget https://github.com/diogomascarenha/oracle-instantclient/raw/master/instantclient-basic-linux.x64-12.1.0.2.0.zip \
+      && wget https://github.com/diogomascarenha/oracle-instantclient/raw/master/instantclient-sdk-linux.x64-12.1.0.2.0.zip \
       && unzip /opt/oracle/instantclient-basic-linux.x64-12.1.0.2.0.zip -d /opt/oracle \
       && unzip /opt/oracle/instantclient-sdk-linux.x64-12.1.0.2.0.zip -d /opt/oracle \
       && ln -s /opt/oracle/instantclient_12_1/libclntsh.so.12.1 /opt/oracle/instantclient_12_1/libclntsh.so \
@@ -927,7 +847,7 @@ RUN if [ ${INSTALL_OCI8} = true ]; then \
   if [ $(php -r "echo PHP_MAJOR_VERSION;") = "5" ]; then \
     echo 'instantclient,/opt/oracle/instantclient_12_1/' | pecl install oci8-2.0.10; \
   else \
-    echo 'instantclient,/opt/oracle/instantclient_12_1/' | pecl install oci8-2.2.0; \
+    echo 'instantclient,/opt/oracle/instantclient_12_1/' | pecl install oci8; \
   fi \
   && echo "extension=oci8.so" >> /etc/php/${LARADOCK_PHP_VERSION}/cli/php.ini \
   && php -m | grep -q 'oci8' \
@@ -1234,7 +1154,7 @@ RUN if [ ${INSTALL_PG_CLIENT} = true ]; then \
     && wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add - \
     && echo "deb http://apt.postgresql.org/pub/repos/apt/ `lsb_release -cs`-pgdg main" | tee /etc/apt/sources.list.d/pgdg.list \
     && apt-get update \
-    && apt-get -y install postgresql-client-12 \
+    && apt-get -y install postgresql-client-10 \
 ;fi
 
 ###########################################################################
@@ -1330,21 +1250,6 @@ RUN if [ ${INSTALL_SSHPASS} = true ]; then \
 ;fi
 
 ###########################################################################
-# Docker Client:
-###########################################################################
-
-USER root
-
-ARG INSTALL_DOCKER_CLIENT=false
-
-RUN if [ ${INSTALL_DOCKER_CLIENT} = true ]; then \
-    curl -sS https://download.docker.com/linux/static/stable/x86_64/docker-20.10.3.tgz -o /tmp/docker.tar.gz && \
-    tar -xzf /tmp/docker.tar.gz -C /tmp/ && \
-    cp /tmp/docker/docker* /usr/local/bin && \
-    chmod +x /usr/local/bin/docker* \
-;fi
-
-###########################################################################
 # YAML: extension for PHP-CLI
 ###########################################################################
 
@@ -1389,30 +1294,6 @@ RUN if [ ${INSTALL_FFMPEG} = true ]; then \
   apt-get -y install ffmpeg \
 ;fi
 
-
-###########################################################################
-# BBC Audio Waveform Image Generator:
-###########################################################################
-
-USER root
-
-ARG INSTALL_AUDIOWAVEFORM=false
-
-RUN if [ ${INSTALL_AUDIOWAVEFORM} = true ]; then \
-   apt-get -y install git wget make cmake gcc g++ libmad0-dev libid3tag0-dev libsndfile1-dev libgd-dev libboost-filesystem-dev libboost-program-options-dev libboost-regex-dev \
-   && git clone https://github.com/bbc/audiowaveform.git \
-   && cd audiowaveform \
-   && wget https://github.com/google/googletest/archive/release-1.10.0.tar.gz \
-   && tar xzf release-1.10.0.tar.gz \
-   && ln -s googletest-release-1.10.0/googletest googletest \
-   && ln -s googletest-release-1.10.0/googlemock googlemock \
-   && mkdir build \
-   && cd build \
-   && cmake .. \
-   && make \
-   && make install \
-;fi
-
 #####################################
 # wkhtmltopdf:
 #####################################
@@ -1428,7 +1309,7 @@ RUN if [ ${INSTALL_WKHTMLTOPDF} = true ]; then \
    libx11-dev \
    libjpeg62 \
    libxtst6 \
-   fontconfig \ 
+   fontconfig \
    libjpeg-turbo8-dev \
    xfonts-base \
    xfonts-75dpi \
@@ -1512,9 +1393,7 @@ RUN if [ ${INSTALL_PROTOC} = true ]; then \
   curl -L -o /tmp/protoc.zip https://github.com/protocolbuffers/protobuf/releases/download/v${REAL_PROTOC_VERSION}/${PROTOC_ZIP} && \
   unzip -q -o /tmp/protoc.zip -d /usr/local bin/protoc && \
   unzip -q -o /tmp/protoc.zip -d /usr/local 'include/*' && \
-  rm -f /tmp/protoc.zip && \
-  chmod +x /usr/local/bin/protoc && \
-  chmod -R +r /usr/local/include/google \
+  rm -f /tmp/protoc.zip \
 ;fi
 
 ###########################################################################
@@ -1534,9 +1413,6 @@ RUN if [ ${SHELL_OH_MY_ZSH} = true ]; then \
     apt install -y zsh \
 ;fi
 
-ARG SHELL_OH_MY_ZSH_AUTOSUGESTIONS=false
-ARG SHELL_OH_MY_ZSH_ALIASES=false
-
 USER laradock
 RUN if [ ${SHELL_OH_MY_ZSH} = true ]; then \
     sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh) --keep-zshrc" && \
@@ -1552,51 +1428,7 @@ bindkey "^[[3~" delete-char\n\
 bindkey "^[[4~" end-of-line\n\
 bindkey "^[[5~" up-line-or-history\n\
 bindkey "^[[6~" down-line-or-history\n\
-bindkey "^?" backward-delete-char\n' >> /home/laradock/.zshrc && \
-  if [ ${SHELL_OH_MY_ZSH_AUTOSUGESTIONS} = true ]; then \
-    sh -c "git clone https://github.com/zsh-users/zsh-autosuggestions /home/laradock/.oh-my-zsh/custom/plugins/zsh-autosuggestions" && \
-    sed -i 's~plugins=(~plugins=(zsh-autosuggestions ~g' /home/laradock/.zshrc && \
-    sed -i '1iZSH_AUTOSUGGEST_BUFFER_MAX_SIZE=20' /home/laradock/.zshrc && \
-    sed -i '1iZSH_AUTOSUGGEST_STRATEGY=(history completion)' /home/laradock/.zshrc && \
-    sed -i '1iZSH_AUTOSUGGEST_USE_ASYNC=1' /home/laradock/.zshrc && \
-    sed -i '1iTERM=xterm-256color' /home/laradock/.zshrc \
-  ;fi && \
-  if [ ${SHELL_OH_MY_ZSH_ALIASES} = true ]; then \
-    echo "" >> /home/laradock/.zshrc && \
-    echo "# Load Custom Aliases" >> /home/laradock/.zshrc && \
-    echo "source /home/laradock/aliases.sh" >> /home/laradock/.zshrc && \
-    echo "" >> /home/laradock/.zshrc \
-  ;fi \
-;fi
-
-USER root
-
-###########################################################################
-# ZSH User Aliases
-###########################################################################
-
-USER root
-
-COPY ./aliases.sh /root/aliases.sh
-COPY ./aliases.sh /home/laradock/aliases.sh
-
-RUN if [ ${SHELL_OH_MY_ZSH} = true ]; then \
-    sed -i 's/\r//' /root/aliases.sh && \
-    sed -i 's/\r//' /home/laradock/aliases.sh && \
-    chown laradock:laradock /home/laradock/aliases.sh && \
-    echo "" >> ~/.zshrc && \
-    echo "# Load Custom Aliases" >> ~/.zshrc && \
-    echo "source ~/aliases.sh" >> ~/.zshrc && \
-	  echo "" >> ~/.zshrc \
-;fi
-
-USER laradock
-
-RUN if [ ${SHELL_OH_MY_ZSH} = true ]; then \
-    echo "" >> ~/.zshrc && \
-    echo "# Load Custom Aliases" >> ~/.zshrc && \
-    echo "source ~/aliases.sh" >> ~/.zshrc && \
-	  echo "" >> ~/.zshrc \
+bindkey "^?" backward-delete-char\n' >> /home/laradock/.zshrc \
 ;fi
 
 USER root
