@@ -1,0 +1,75 @@
+
+version: '2'
+
+### Change the `project` with your own project name ###
+services:
+  application:
+    container_name: project_application
+    image: debian
+    volumes:
+      - ../web:/var/www
+  workspace:
+    container_name: project_workspace
+    restart: always
+    build:
+      context: ./workspace
+      dockerfile: Dockerfile
+    volumes_from:
+      - application
+    tty: true
+  php-fpm:
+    container_name: project_php-fpm
+    restart: always
+    build:
+      context: ./php-fpm
+      dockerfile: Dockerfile
+    volumes_from:
+      - application
+    expose:
+      - "9000"
+    links:
+      - workspace
+  nginx:
+    container_name: project_nginx
+    restart: always
+    image: framgia/laravel-nginx
+    volumes_from:
+      - data
+      - logs
+      - application
+    ports:
+      - "8000:80"
+    links:
+      - php-fpm
+  data:
+    container_name: project_data
+    image: debian
+    volumes:
+      - .docker/mysql:/var/lib/mysql
+      - .docker/data:/data
+  data_test:
+    container_name: project_data_test
+    image: debian
+    volumes:
+      - .docker/mysql_test:/var/lib/mysql
+      - .docker/data_test:/data
+  logs:
+    container_name: project_logs
+    image: debian
+    volumes:
+      - .docker/logs/nginx:/var/log/nginx
+      - .docker/logs/mongodb:/var/log/mongodb
+  mysql:
+    image: arm64v8/mariadb
+    container_name: project_mysql
+    restart: always
+    volumes_from:
+      - data
+      - logs
+    expose:
+      - "3306"
+    environment:
+      MYSQL_DATABASE: homestead
+      MYSQL_USER: homestead
+      MYSQL_PASSWORD: secret
+      MYSQL_ROOT_PASSWORD: root
